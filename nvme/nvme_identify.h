@@ -52,12 +52,12 @@
 #define PCI_VENDOR_ID				0x1EDC
 #define PCI_SUBSYSTEM_VENDOR_ID		0x1EDC
 #define SERIAL_NUMBER				"SSDD515T"
-#define MODEL_NUMBER				"Cosmos+ OpenSSD"
-#define FIRMWARE_REVISION			"TYPE0005"
+#define MODEL_NUMBER				"DaisyPlus OpenSSD"
+#define FIRMWARE_REVISION			"TYPE0006"
 
-void identify_controller(unsigned int pBuffer);
+void controller_identification(unsigned int pBuffer);
 
-void identify_namespace(unsigned int pBuffer);
+void namespace_identification(unsigned int pBuffer);
 
 
 #endif	//__NVME_IDENTIFY_H_

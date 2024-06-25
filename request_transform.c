@@ -54,7 +54,6 @@
 #include "memory_map.h"
 #include "ftl_config.h"
 #include "trim.h"
-#include "data_buffer.h"
 
 P_ROW_ADDR_DEPENDENCY_TABLE rowAddrDependencyTablePtr;
 
@@ -79,7 +78,7 @@ void InitDependencyTable()
 
 void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigned int nlb, unsigned int cmdCode)
 {
-	unsigned int reqSlotTag, requestedNvmeBlock, tempNumOfNvmeBlock, transCounter, tempLsa, loop, nvmeBlockOffset, nvmeDmaStartIndex, reqCode, printtime;
+	unsigned int reqSlotTag, requestedNvmeBlock, tempNumOfNvmeBlock, transCounter, tempLsa, loop, nvmeBlockOffset, nvmeDmaStartIndex, reqCode;
 
 	requestedNvmeBlock = nlb + 1;
 	transCounter = 0;
@@ -94,7 +93,7 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 	else
 		assert(!"[WARNING] Not supported command code [WARNING]");
 
-	//first transform  transform占쎌뱽 筌잛눊而삼옙�뮉 占쎌뵠占쎌�占쎈뮉 占쎈뮩占쎌뵬占쎌뵠占쎈뮞 占쎄땀 �뇡遺얠뵭 揶쏆뮇�땾 占쎈르�눧紐꾨퓠
+	//first transform
 	nvmeBlockOffset = (startLba % NVME_BLOCKS_PER_SLICE);
 	if(loop)
 		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE - nvmeBlockOffset;
@@ -110,15 +109,80 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
-	//xil_printf("1st tempLsa : %d, nvmeBlockOffset : %d, tempNumOfNvmeBlock : %d\r\n", tempLsa, nvmeBlockOffset, tempNumOfNvmeBlock);
+	if ((nlb % 4) == 1) 
+	{
+		if (nvmeBlockOffset == 0) {
+			reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+		} else if (nvmeBlockOffset == 1) {
+			reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+		} else if (nvmeBlockOffset == 2) {
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+		} else {
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		}
+	}
+	else if((nlb % 4) == 2)
+	{
+		if (nvmeBlockOffset == 0) 
+		{
+			reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+		}
+		else if (nvmeBlockOffset == 1) 
+		{
+			reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+		}
+		else if (nvmeBlockOffset == 2) 
+		{
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		}
+		else {
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		}
+	}
+	else if ((nlb % 4) == 3) 
+	{
+		if (nvmeBlockOffset == 0) {
+			reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+		} else if (nvmeBlockOffset == 1) {
+			reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		} else if (nvmeBlockOffset == 2) {
+			reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		} else  {
+			reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+		} 
+	}
+	else {
+			if (nvmeBlockOffset == 0) {
+				reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+			} else if (nvmeBlockOffset == 1) {
+				reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+			} else if (nvmeBlockOffset == 2){
+				reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+				reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+			} else {
+				reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+			}
+	}
 
 	PutToSliceReqQ(reqSlotTag);
 
 	tempLsa++;
 	transCounter++;
 	nvmeDmaStartIndex += tempNumOfNvmeBlock;
-	
-	printtime = 0;
+
 	//transform continue
 	while(transCounter < loop)
 	{
@@ -134,7 +198,10 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
 		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
 		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
-        	//xil_printf("%drd tempLsa : %d, nvmeBlockOffset : %d, tempNumOfNvmeBlock : %d\r\n", printtime, tempLsa, nvmeBlockOffset, tempNumOfNvmeBlock);
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
 
 		PutToSliceReqQ(reqSlotTag);
 
@@ -146,6 +213,7 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 	//last transform
 	nvmeBlockOffset = 0;
 	tempNumOfNvmeBlock = (startLba + requestedNvmeBlock) % NVME_BLOCKS_PER_SLICE;
+	unsigned int delayNumOfNvmeBlock = (startLba + nlb) % NVME_BLOCKS_PER_SLICE;
 	if((tempNumOfNvmeBlock == 0) || (loop == 0))
 		return ;
 
@@ -158,6 +226,22 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
+
+	if (delayNumOfNvmeBlock == 1){
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+	} else if (delayNumOfNvmeBlock == 2) {
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+	} else if (delayNumOfNvmeBlock == 3) {
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+	} else {
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk1 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk2 = 1;
+		reqPoolPtr->reqPool[reqSlotTag].blk3 = 1;
+	}
 
 	PutToSliceReqQ(reqSlotTag);
 }
@@ -172,28 +256,25 @@ void EvictDataBufEntry(unsigned int originReqSlotTag)
 	if(dataBufMapPtr->dataBuf[dataBufEntry].dirty == DATA_BUF_DIRTY)
 	{
 		reqSlotTag = GetFromFreeReqQ();
-		if (dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr != LOGICAL_SLICE_ADDR_DSM)
-		{
-			virtualSliceAddr =  AddrTransWrite(dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr);
+		virtualSliceAddr =  AddrTransWrite(dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr);
 
-			reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NAND;
-			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_WRITE;
-			reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = reqPoolPtr->reqPool[originReqSlotTag].nvmeCmdSlotTag;
-			reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandAddr = REQ_OPT_NAND_ADDR_VSA;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEcc = REQ_OPT_NAND_ECC_ON;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEccWarning = REQ_OPT_NAND_ECC_WARNING_ON;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.rowAddrDependencyCheck = REQ_OPT_ROW_ADDR_DEPENDENCY_CHECK;
-			reqPoolPtr->reqPool[reqSlotTag].reqOpt.blockSpace = REQ_OPT_BLOCK_SPACE_MAIN;
-			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
-			UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
-			reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr;
+		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NAND;
+		reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_WRITE;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = reqPoolPtr->reqPool[originReqSlotTag].nvmeCmdSlotTag;
+		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandAddr = REQ_OPT_NAND_ADDR_VSA;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEcc = REQ_OPT_NAND_ECC_ON;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEccWarning = REQ_OPT_NAND_ECC_WARNING_ON;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.rowAddrDependencyCheck = REQ_OPT_ROW_ADDR_DEPENDENCY_CHECK;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.blockSpace = REQ_OPT_BLOCK_SPACE_MAIN;
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+		UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+		reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr;
 
-			SelectLowLevelReqQ(reqSlotTag);
+		SelectLowLevelReqQ(reqSlotTag);
 
-			dataBufMapPtr->dataBuf[dataBufEntry].dirty = DATA_BUF_CLEAN;
-		}
+		dataBufMapPtr->dataBuf[dataBufEntry].dirty = DATA_BUF_CLEAN;
 	}
 }
 
@@ -243,13 +324,20 @@ void ReqTransSliceToLowLevel()
 		{
 			//data buffer hit
 			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+//			if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_RxDMA)
+//			{
+//				xil_printf("dataBufEntry : %d\r\n",dataBufEntry);
+//			}
 		}
 		else
 		{
-			//if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ || reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_RxDMA)
-				//xil_printf("buffer miss!!\r\n");
+			unsigned int flag = 0;
+			if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_RxDMA)
+			{
+				flag = 1;
+			}
 			//data buffer miss, allocate a new buffer entry
-			dataBufEntry = AllocateDataBuf();
+			dataBufEntry = AllocateDataBuf(flag);
 			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
 
 			//clear the allocated data buffer entry being used by a previous request
@@ -257,34 +345,47 @@ void ReqTransSliceToLowLevel()
 
 			//update meta-data of the allocated data buffer entry
 			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
-			PutToDataBufHashList(dataBufEntry);
+			if (reqPoolPtr->reqPool[reqSlotTag].reqCode != REQ_CODE_RxDMA)
+			{
+				PutToDataBufHashList(dataBufEntry);
+			}
 
 			if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ)
 				DataReadFromNand(reqSlotTag);
 			else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_WRITE)
 				if(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock != NVME_BLOCKS_PER_SLICE) //for read modify write
 					DataReadFromNand(reqSlotTag);
+
+
+//			if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_RxDMA)
+//			{
+//				xil_printf("dataBufEntry : %d\r\n",dataBufEntry);
+//			}
 		}
 
 		//transform this slice request to nvme request
-		if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_WRITE)
+		if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_WRITE)
 		{
+			global_write_cnt += 1;
 			dataBufMapPtr->dataBuf[dataBufEntry].dirty = DATA_BUF_DIRTY;
 			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_RxDMA;
-		} 
-		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_RxDMA)
-                {
-                        dataBufMapPtr->dataBuf[dataBufEntry].dirty = DATA_BUF_DIRTY;
-                }
+
+			dataBufMapPtr->dataBuf[dataBufEntry].blk0 = reqPoolPtr->reqPool[reqSlotTag].blk0;
+			dataBufMapPtr->dataBuf[dataBufEntry].blk0 = reqPoolPtr->reqPool[reqSlotTag].blk1;
+			dataBufMapPtr->dataBuf[dataBufEntry].blk0 = reqPoolPtr->reqPool[reqSlotTag].blk2;
+			dataBufMapPtr->dataBuf[dataBufEntry].blk0 = reqPoolPtr->reqPool[reqSlotTag].blk3;
+		}
 		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ)
 			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_TxDMA;
-		else
+		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode != REQ_CODE_RxDMA)
 			assert(!"[WARNING] Not supported reqCode. [WARNING]");
 
 		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NVME_DMA;
 		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
-
-		UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+		if(dataBufEntry != AVAILABLE_DATA_BUFFER_ENTRY_COUNT-1)
+		{
+			UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+		}
 		SelectLowLevelReqQ(reqSlotTag);
 	}
 }
@@ -592,10 +693,12 @@ void IssueNvmeDmaReq(unsigned int reqSlotTag)
 
 	dmaIndex = reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex;
 	devAddr = GenerateDataBufAddr(reqSlotTag);
-	trimdevAddr = devAddr;
-	
 	numOfNvmeBlock = 0;
 
+	if(trim_flag == 1) {
+		trimDevAddr = devAddr;
+//		xil_printf("devAddr : %d\r\n",trimDevAddr);
+	}
 	if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_RxDMA)
 	{
 		while(numOfNvmeBlock < reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock)
@@ -641,21 +744,19 @@ void CheckDoneNvmeDmaReq()
 
 		if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_RxDMA)
 		{
-			if(!rxDone) {
+			if(!rxDone)
 				rxDone = check_auto_rx_dma_partial_done(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.reqTail , reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.overFlowCnt);
-			}
-			if(rxDone) {
+
+			if(rxDone)
 				SelectiveGetFromNvmeDmaReqQ(reqSlotTag);
-			}
 		}
 		else
 		{
-			if(!txDone) {
+			if(!txDone)
 				txDone = check_auto_tx_dma_partial_done(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.reqTail , reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.overFlowCnt);
-			}
-			if(txDone) {
+
+			if(txDone)
 				SelectiveGetFromNvmeDmaReqQ(reqSlotTag);
-			}
 		}
 
 		reqSlotTag = prevReq;

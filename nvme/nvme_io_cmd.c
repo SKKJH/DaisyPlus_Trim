@@ -60,43 +60,9 @@
 
 #include "../ftl_config.h"
 #include "../request_transform.h"
+#include "../request_format.h"
 #include "../request_allocation.h"
-
 #include "../trim.h"
-
-void nvme_trim(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd){
-
-        //DATASET_MANAGEMENT_RANGE* dmRange = malloc(sizeof(DATASET_MANAGEMENT_RANGE) * nr);
-	trim_flag = 1;
-
-        unsigned int reqSlotTag = GetFromFreeReqQ();
-        TrimReqTag = reqSlotTag;
-        reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
-        reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_RxDMA;
-        reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
-        reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = LOGICAL_SLICE_ADDR_DSM;
-        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = 0;
-        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = 0;
-        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = 1;
-
-        PutToSliceReqQ(reqSlotTag);
-}
-
-void handle_nvme_io_data_manage(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
-{
-        _IO_DATASET_MANAGEMENT_COMMAND_DW10 dmInfo10;
-        _IO_DATASET_MANAGEMENT_COMMAND_DW11 dmInfo11;
-
-        dmInfo10 = *(_IO_DATASET_MANAGEMENT_COMMAND_DW10*)&nvmeIOCmd->dword[10];
-        dmInfo11 = *(_IO_DATASET_MANAGEMENT_COMMAND_DW11*)&nvmeIOCmd->dword[11];
-
-        if (dmInfo11.AD == 1) {
-               // xil_printf("operate trim start\r\n");
-               	nr = dmInfo10.NR + 1;
-                nvme_trim(cmdSlotTag, nvmeIOCmd);
-         }
-}
-
 
 void handle_nvme_io_read(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 {
@@ -122,6 +88,32 @@ void handle_nvme_io_read(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 	ReqTransNvmeToSlice(cmdSlotTag, startLba[0], nlb, IO_NVM_READ);
 }
 
+void handle_nvme_io_dsm(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
+{
+	_IO_DATASET_MANAGEMENT_COMMAND_DW10 dmInfo10;
+	_IO_DATASET_MANAGEMENT_COMMAND_DW11 dmInfo11;
+
+	dmInfo10 = *(_IO_DATASET_MANAGEMENT_COMMAND_DW10*)&nvmeIOCmd->dword[10];
+	dmInfo11 = *(_IO_DATASET_MANAGEMENT_COMMAND_DW11*)&nvmeIOCmd->dword[11];
+
+	if (dmInfo11.AD == 1)
+	{
+		nr = dmInfo10.NR + 1;
+		//xil_printf("nr : %d\r\n",nr);
+		trim_flag = 1;
+
+		unsigned int reqSlotTag = GetFromFreeReqQ();
+		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
+		reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_RxDMA;
+        reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
+        reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = LOGICAL_SLICE_ADDR_DSM;
+        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = 0;
+        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = 0;
+        reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = 1;
+        PutToSliceReqQ(reqSlotTag);
+	}
+}
+
 void handle_nvme_io_write(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 {
 	IO_READ_COMMAND_DW12 writeInfo12;
@@ -139,7 +131,7 @@ void handle_nvme_io_write(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 
 	startLba[0] = nvmeIOCmd->dword[10];
 	startLba[1] = nvmeIOCmd->dword[11];
-	nlb = writeInfo12.NLB; //Number of Logical Blocks
+	nlb = writeInfo12.NLB;
 
 	ASSERT(startLba[0] < storageCapacity_L && (startLba[1] < STORAGE_CAPACITY_H || startLba[1] == 0));
 	//ASSERT(nlb < MAX_NUM_OF_NLB);
@@ -154,28 +146,22 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 	NVME_IO_COMMAND *nvmeIOCmd;
 	NVME_COMPLETION nvmeCPL;
 	unsigned int opc;
-	nvmeIOCmd = (NVME_IO_COMMAND*)nvmeCmd->cmdDword;
-	/*		xil_printf("OPC = 0x%X\r\n", nvmeIOCmd->OPC);
-			xil_printf("PRP1[63:32] = 0x%X, PRP1[31:0] = 0x%X\r\n", nvmeIOCmd->PRP1[1], nvmeIOCmd->PRP1[0]);
-			xil_printf("PRP2[63:32] = 0x%X, PRP2[31:0] = 0x%X\r\n", nvmeIOCmd->PRP2[1], nvmeIOCmd->PRP2[0]);
-			xil_printf("dword10 = 0x%X\r\n", nvmeIOCmd->dword10);
-			xil_printf("dword11 = 0x%X\r\n", nvmeIOCmd->dword11);
-			xil_printf("dword12 = 0x%X\r\n", nvmeIOCmd->dword12);*/
 
+	nvmeIOCmd = (NVME_IO_COMMAND*)nvmeCmd->cmdDword;
 
 	opc = (unsigned int)nvmeIOCmd->OPC;
 
 	switch(opc)
-	{	
+	{
 		case IO_NVM_DATASET_MANAGEMENT:
-        {
-                //xil_printf("IO Dataset Management Command\r\n");
-                handle_nvme_io_data_manage(nvmeCmd->cmdSlotTag, nvmeIOCmd);
-                break;
-        }
+		{
+			PRINT("IO DSM Command\r\n");
+			handle_nvme_io_dsm(nvmeCmd->cmdSlotTag,nvmeIOCmd);
+			break;
+		}
 		case IO_NVM_FLUSH:
 		{
-		//	xil_printf("IO Flush Command\r\n");
+			PRINT("IO Flush Command\r\n");
 			nvmeCPL.dword[0] = 0;
 			nvmeCPL.specific = 0x0;
 			set_auto_nvme_cpl(nvmeCmd->cmdSlotTag, nvmeCPL.specific, nvmeCPL.statusFieldWord);
@@ -183,22 +169,40 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 		}
 		case IO_NVM_WRITE:
 		{
-//			xil_printf("IO Write Command\r\n");
+			PRINT("IO Write Command\r\n");
 			handle_nvme_io_write(nvmeCmd->cmdSlotTag, nvmeIOCmd);
 			break;
 		}
 		case IO_NVM_READ:
 		{
-//			xil_printf("IO Read Command\r\n");
+			PRINT("IO Read Command\r\n");
 			handle_nvme_io_read(nvmeCmd->cmdSlotTag, nvmeIOCmd);
 			break;
 		}
+		case IO_NVM_WRITE_ZEROS:
+		{
+			PRINT("IO Write Zeros Command\r\n");
+			nvmeCPL.dword[0] = 0;
+			nvmeCPL.specific = 0x0;
+			set_auto_nvme_cpl(nvmeCmd->cmdSlotTag, nvmeCPL.specific, nvmeCPL.statusFieldWord);
+			break;
+		}
+
 		default:
 		{
-			xil_printf("Not Support IO Command OPC: %X\r\n", opc);
+			xil_printf("Not Support IO Command OPC: 0x%X\r\n", opc);
 			ASSERT(0);
 			break;
 		}
 	}
+
+#if (__IO_CMD_DONE_MESSAGE_PRINT)
+    xil_printf("OPC = 0x%X\r\n", nvmeIOCmd->OPC);
+    xil_printf("PRP1[63:32] = 0x%X, PRP1[31:0] = 0x%X\r\n", nvmeIOCmd->PRP1[1], nvmeIOCmd->PRP1[0]);
+    xil_printf("PRP2[63:32] = 0x%X, PRP2[31:0] = 0x%X\r\n", nvmeIOCmd->PRP2[1], nvmeIOCmd->PRP2[0]);
+    xil_printf("dword10 = 0x%X\r\n", nvmeIOCmd->dword10);
+    xil_printf("dword11 = 0x%X\r\n", nvmeIOCmd->dword11);
+    xil_printf("dword12 = 0x%X\r\n", nvmeIOCmd->dword12);
+#endif
 }
 

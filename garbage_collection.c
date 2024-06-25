@@ -48,6 +48,7 @@
 #include "xil_printf.h"
 #include <assert.h>
 #include "memory_map.h"
+#include "trim.h"
 
 P_GC_VICTIM_MAP gcVictimMapPtr;
 
@@ -70,7 +71,9 @@ void InitGcVictimMap()
 
 void GarbageCollection(unsigned int dieNo)
 {
-	xil_printf("GarbageCollection\n");
+	//xil_printf("GC occured\r\n");
+	XTime_GetTime(&cmdStart);
+	//xil_printf("Activate GarbageCollection!!\r\n");
 	unsigned int victimBlockNo, pageNo, virtualSliceAddr, logicalSliceAddr, dieNoForGcCopy, reqSlotTag;
 
 	victimBlockNo = GetFromGcVictimList(dieNo);
@@ -105,6 +108,7 @@ void GarbageCollection(unsigned int dieNo)
 					SelectLowLevelReqQ(reqSlotTag);
 
 					//write
+					global_flush_cnt += 1;
 					reqSlotTag = GetFromFreeReqQ();
 
 					reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NAND;
@@ -129,6 +133,8 @@ void GarbageCollection(unsigned int dieNo)
 	}
 
 	EraseBlock(dieNo, victimBlockNo);
+	XTime_GetTime(&cmdEnd);
+	cmdTime += cmdEnd - cmdStart;
 }
 
 
@@ -155,7 +161,7 @@ unsigned int GetFromGcVictimList(unsigned int dieNo)
 	unsigned int evictedBlockNo;
 	int invalidSliceCnt;
 
-	for(invalidSliceCnt = SLICES_PER_BLOCK; invalidSliceCnt > 0 ; invalidSliceCnt--)         //InvalidSliceCnt=128
+	for(invalidSliceCnt = SLICES_PER_BLOCK; invalidSliceCnt > 0 ; invalidSliceCnt--)
 	{
 		if(gcVictimMapPtr->gcVictimList[dieNo][invalidSliceCnt].headBlock != BLOCK_NONE)
 		{

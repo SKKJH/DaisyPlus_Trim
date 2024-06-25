@@ -99,8 +99,8 @@
 #define REQ_OPT_BLOCK_SPACE_MAIN	0
 #define REQ_OPT_BLOCK_SPACE_TOTAL 	1
 
-#define LOGICAL_SLICE_ADDR_DSM		0xfffffffe
 #define LOGICAL_SLICE_ADDR_NONE 	0xffffffff
+#define LOGICAL_SLICE_ADDR_DSM      0xffffffe
 
 typedef struct _DATA_BUF_INFO{
 	union {
@@ -158,7 +158,11 @@ typedef struct _SSD_REQ_FORMAT
 	unsigned int reqCode : 8;
 	unsigned int nvmeCmdSlotTag : 16;
 
-	unsigned int logicalSliceAddr;
+	unsigned int logicalSliceAddr : 28;
+	unsigned int blk0 : 1;
+	unsigned int blk1 : 1;
+	unsigned int blk2 : 1;
+	unsigned int blk3 : 1;
 
 	REQ_OPTION reqOpt;
 	DATA_BUF_INFO dataBufInfo;

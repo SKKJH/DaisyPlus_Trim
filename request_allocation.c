@@ -98,6 +98,11 @@ void InitReqPool()
 		reqPoolPtr->reqPool[reqSlotTag].nextBlockingReq = REQ_SLOT_TAG_NONE;
 		reqPoolPtr->reqPool[reqSlotTag].prevReq = reqSlotTag - 1;
 		reqPoolPtr->reqPool[reqSlotTag].nextReq = reqSlotTag + 1;
+
+		reqPoolPtr->reqPool[reqSlotTag].blk0 = 0;
+		reqPoolPtr->reqPool[reqSlotTag].blk1 = 0;
+		reqPoolPtr->reqPool[reqSlotTag].blk2 = 0;
+		reqPoolPtr->reqPool[reqSlotTag].blk3 = 0;
 	}
 
 	reqPoolPtr->reqPool[0].prevReq = REQ_SLOT_TAG_NONE;

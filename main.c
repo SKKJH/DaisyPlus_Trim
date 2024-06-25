@@ -84,30 +84,28 @@ int main()
 
 	Xil_ICacheDisable();
 	Xil_DCacheDisable();
-	Xil_DisableMMU();
 
 	// Paging table set
 	#define MB (1024*1024)
-	for (u = 0; u < 4096; u++)
+	for (u = 0; u < 4096; u+=2)
 	{
 		if (u < 0x2)
-			Xil_SetTlbAttributes(u * MB, 0xC1E); // cached & buffered
+			Xil_SetTlbAttributes(u * MB, NORM_WB_CACHE);
 		else if (u < 0x180)
-			Xil_SetTlbAttributes(u * MB, 0xC12); // uncached & nonbuffered
+			Xil_SetTlbAttributes(u * MB, NORM_NONCACHE);
 		else if (u < 0x400)
-			Xil_SetTlbAttributes(u * MB, 0xC1E); // cached & buffered
+			Xil_SetTlbAttributes(u * MB, NORM_WB_CACHE);
+		else if (u < 0x800)
+			Xil_SetTlbAttributes(u * MB, NORM_NONCACHE);
 		else
-			Xil_SetTlbAttributes(u * MB, 0xC12); // uncached & nonbuffered
+			Xil_SetTlbAttributes(u * MB, STRONG_ORDERED);
 	}
 
-	Xil_EnableMMU();
 	Xil_ICacheEnable();
 	Xil_DCacheEnable();
 	xil_printf("[!] MMU has been enabled.\r\n");
 
-
-	xil_printf("\r\n Hello COSMOS+ OpenSSD !!! \r\n");
-
+	xil_printf("\r\n Hello DaisyPlus OpenSSD !!! \r\n");
 
 	Xil_ExceptionInit();
 
@@ -117,11 +115,11 @@ int main()
 								(Xil_ExceptionHandler)XScuGic_InterruptHandler,
 								&GicInstance);
 
-	XScuGic_Connect(&GicInstance, 61,
+	XScuGic_Connect(&GicInstance, XPS_FPGA0_INT_ID,
 					(Xil_ExceptionHandler)dev_irq_handler,
 					(void *)0);
 
-	XScuGic_Enable(&GicInstance, 61);
+	XScuGic_Enable(&GicInstance, XPS_FPGA0_INT_ID);
 
 	// Enable interrupts in the Processor.
 	Xil_ExceptionEnableMask(XIL_EXCEPTION_IRQ);

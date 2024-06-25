@@ -55,7 +55,7 @@
 #define __HOST_LLD_H_
 
 
-#define HOST_IP_ADDR						(XPAR___NVMEHOSTCONTROLLER_0_BASEADDR)
+#define HOST_IP_ADDR						(XPAR_NVME_CTRL_0_BASEADDR)
 
 #define DEV_IRQ_MASK_REG_ADDR				(HOST_IP_ADDR + 0x4)
 #define DEV_IRQ_CLEAR_REG_ADDR				(HOST_IP_ADDR + 0x8)
@@ -202,11 +202,11 @@ typedef struct _NVME_CPL_FIFO_REG
 				struct 
 				{
 					unsigned short reserved0	:1;
-					unsigned short SC			:8;
-					unsigned short SCT			:3;
+					unsigned short SC			:8;//Status Code
+					unsigned short SCT			:3;//Status Code Type
 					unsigned short reserved1	:2;
 					unsigned short MORE			:1;
-					unsigned short DNR			:1;
+					unsigned short DNR			:1;//Do Not Retry
 				}statusField;
 			};
 		};

@@ -49,8 +49,7 @@
 
 #include "ftl_config.h"
 
-#define AVAILABLE_DATA_BUFFER_ENTRY_COUNT				(16 * USER_DIES) //16*64=1024
-//#define AVAILABLE_DATA_BUFFER_ENTRY_COUNT				8
+#define AVAILABLE_DATA_BUFFER_ENTRY_COUNT				(16 * USER_DIES)
 #define AVAILABLE_TEMPORARY_DATA_BUFFER_ENTRY_COUNT		(USER_DIES)
 
 #define DATA_BUF_NONE	0xffff
@@ -62,7 +61,11 @@
 
 
 typedef struct _DATA_BUF_ENTRY {
-	unsigned int logicalSliceAddr;
+	unsigned int logicalSliceAddr : 28;
+	unsigned int blk0 : 1;
+	unsigned int blk1 : 1;
+	unsigned int blk2 : 1;
+	unsigned int blk3 : 1;
 	unsigned int prevEntry : 16;
 	unsigned int nextEntry : 16;
 	unsigned int blockingReqTail : 16;
@@ -102,9 +105,9 @@ typedef struct _TEMPORARY_DATA_BUF_MAP{
 } TEMPORARY_DATA_BUF_MAP, *P_TEMPORARY_DATA_BUF_MAP;
 
 void InitDataBuf();
-unsigned int CheckDataBufHitByLBA(unsigned int startingLBA);
 unsigned int CheckDataBufHit(unsigned int reqSlotTag);
-unsigned int AllocateDataBuf();
+unsigned int CheckDataBufHitByLSA(unsigned int logicalSliceAddr);
+unsigned int AllocateDataBuf(unsigned int flag);
 void UpdateDataBufEntryInfoBlockingReq(unsigned int bufEntry, unsigned int reqSlotTag);
 
 unsigned int AllocateTempDataBuf(unsigned int dieNo);
@@ -117,5 +120,6 @@ extern P_DATA_BUF_MAP dataBufMapPtr;
 extern DATA_BUF_LRU_LIST dataBufLruList;
 extern P_DATA_BUF_HASH_TABLE dataBufHashTable;
 extern P_TEMPORARY_DATA_BUF_MAP tempDataBufMapPtr;
+extern P_DSM_RANGE dmRangePtr;
 
 #endif /* DATA_BUFFER_H_ */

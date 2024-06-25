@@ -48,7 +48,6 @@
 #include <assert.h>
 #include "memory_map.h"
 #include "xil_printf.h"
-#include "trim.h"
 
 P_LOGICAL_SLICE_MAP logicalSliceMapPtr;
 P_VIRTUAL_SLICE_MAP virtualSliceMapPtr;
@@ -94,6 +93,10 @@ void InitSliceMap()
 	for(sliceAddr=0; sliceAddr<SLICES_PER_SSD ; sliceAddr++)
 	{
 		logicalSliceMapPtr->logicalSlice[sliceAddr].virtualSliceAddr = VSA_NONE;
+		logicalSliceMapPtr->logicalSlice[sliceAddr].blk0 = 0;
+		logicalSliceMapPtr->logicalSlice[sliceAddr].blk1 = 0;
+		logicalSliceMapPtr->logicalSlice[sliceAddr].blk2 = 0;
+		logicalSliceMapPtr->logicalSlice[sliceAddr].blk3 = 0;
 		virtualSliceMapPtr->virtualSlice[sliceAddr].logicalSliceAddr = LSA_NONE;
 	}
 }
@@ -153,37 +156,40 @@ void RemapBadBlock()
 				}
 			}
 
-			//lun1
-			if(phyBlockMapPtr->phyBlock[dieNo][blockNo+TOTAL_BLOCKS_PER_LUN].bad)
+			if (LUNS_PER_DIE > 1)
 			{
-				if(reservedBlockOfLun1[dieNo] < TOTAL_BLOCKS_PER_DIE)
+				//lun1
+				if(phyBlockMapPtr->phyBlock[dieNo][blockNo+TOTAL_BLOCKS_PER_LUN].bad)
 				{
-					remapFlag = 1;
-					while(phyBlockMapPtr->phyBlock[dieNo][reservedBlockOfLun1[dieNo]].bad)
+					if(reservedBlockOfLun1[dieNo] < TOTAL_BLOCKS_PER_DIE)
 					{
-						reservedBlockOfLun1[dieNo]++;
-						if(reservedBlockOfLun1[dieNo] >= TOTAL_BLOCKS_PER_DIE)
+						remapFlag = 1;
+						while(phyBlockMapPtr->phyBlock[dieNo][reservedBlockOfLun1[dieNo]].bad)
 						{
-							remapFlag = 0;
-							break;
+							reservedBlockOfLun1[dieNo]++;
+							if(reservedBlockOfLun1[dieNo] >= TOTAL_BLOCKS_PER_DIE)
+							{
+								remapFlag = 0;
+								break;
+							}
 						}
-					}
 
-					if(remapFlag)
-					{
-						phyBlockMapPtr->phyBlock[dieNo][blockNo+TOTAL_BLOCKS_PER_LUN].remappedPhyBlock  = reservedBlockOfLun1[dieNo];
-						reservedBlockOfLun1[dieNo]++;
+						if(remapFlag)
+						{
+							phyBlockMapPtr->phyBlock[dieNo][blockNo+TOTAL_BLOCKS_PER_LUN].remappedPhyBlock  = reservedBlockOfLun1[dieNo];
+							reservedBlockOfLun1[dieNo]++;
+						}
+						else
+						{
+							xil_printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
+							badBlockCount[dieNo]++;
+						}
 					}
 					else
 					{
 						xil_printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
 						badBlockCount[dieNo]++;
 					}
-				}
-				else
-				{
-					xil_printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
-					badBlockCount[dieNo]++;
 				}
 			}
 		}
@@ -761,12 +767,8 @@ void InvalidateOldVsa(unsigned int logicalSliceAddr)
 
 	if(virtualSliceAddr != VSA_NONE)
 	{
-		if(trim_flag==1) {
-			xil_printf("Invalidate Old Vsa\n");
-		}
-		if(virtualSliceMapPtr->virtualSlice[virtualSliceAddr].logicalSliceAddr != logicalSliceAddr) {
+		if(virtualSliceMapPtr->virtualSlice[virtualSliceAddr].logicalSliceAddr != logicalSliceAddr)
 			return;
-		}
 
 		dieNo = Vsa2VdieTranslation(virtualSliceAddr);
 		blockNo = Vsa2VblockTranslation(virtualSliceAddr);

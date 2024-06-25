@@ -61,6 +61,9 @@
 
 #define MAX_NUM_OF_NLB					(512 * 1024 / 4096)
 
+#define NVME_COMMAND_AUTO_COMPLETION_OFF	0
+#define NVME_COMMAND_AUTO_COMPLETION_ON		1
+
 /*Opcodes for Admin Commands */
 #define ADMIN_DELETE_IO_SQ									0x00
 #define ADMIN_CREATE_IO_SQ									0x01
@@ -85,6 +88,7 @@
 #define IO_NVM_READ											0x02
 #define IO_NVM_WRITE_UNCORRECTABLE							0x04
 #define IO_NVM_COMPARE										0x05
+#define IO_NVM_WRITE_ZEROS									0x08
 #define IO_NVM_DATASET_MANAGEMENT							0x09
 
 /*Status Code Type */
@@ -174,7 +178,6 @@
 
 
 /* Set/Get Features - Features Identifiers */
-
 #define ARBITRATION											0x01
 #define POWER_MANAGEMENT									0x02
 #define LBA_RANGE_TYPE										0x03
@@ -186,10 +189,9 @@
 #define INTERRUPT_VECTOR_CONFIGURATION						0x09
 #define WRITE_ATOMICITY										0x0A
 #define ASYNCHRONOUS_EVENT_CONFIGURATION					0x0B
-#define Power_State_Transition								0x0C
-#define Timestamp											0x0E
+#define POWER_STATE_TRANSITION								0x0C
+#define TIMESTAMP											0x0E
 #define SOFTWARE_PROGRESS_MARKER							0x80
-
 
 #define NVME_TASK_IDLE										0x0
 #define NVME_TASK_WAIT_CC_EN								0x1
@@ -233,17 +235,6 @@ typedef struct _NVME_ADMIN_COMMAND
 		};
 	};
 }NVME_ADMIN_COMMAND;
-
-typedef struct _ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_COMPLETE
-{
-	union {
-		unsigned int dword;
-		struct {
-			unsigned short NCQA;//zero-based value
-			unsigned short NSQA;//zero-based value
-		};
-	};
-} ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_COMPLETE;
 
 typedef struct _NVME_IO_COMMAND
 {
@@ -313,11 +304,22 @@ typedef struct _ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_DW11
 	union {
 		unsigned int dword;
 		struct {
-			unsigned short NCQR;
-			unsigned short NSQR;
+			unsigned short NCQR;//zero-based value
+			unsigned short NSQR;//zero-based value
 		};
 	};
 } ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_DW11;
+
+typedef struct _ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_COMPLETE
+{
+	union {
+		unsigned int dword;
+		struct {
+			unsigned short NCQA;//zero-based value
+			unsigned short NSQA;//zero-based value
+		};
+	};
+} ADMIN_SET_FEATURES_NUMBER_OF_QUEUES_COMPLETE;
 
 
 /* Get Features Command */
@@ -333,6 +335,17 @@ typedef struct _ADMIN_GET_FEATURES_DW10
 		};
 	};
 } ADMIN_GET_FEATURES_DW10;
+
+typedef struct _ADMIN_GET_FEATURES_NUMBER_OF_QUEUES_COMPLETE
+{
+	union {
+		unsigned int dword;
+		struct {
+			unsigned short NCQA;//zero-based value
+			unsigned short NSQA;//zero-based value
+		};
+	};
+} ADMIN_GET_FEATURES_NUMBER_OF_QUEUES_COMPLETE;
 
 /* Create I/O Completion Queue Command */
 typedef struct _ADMIN_CREATE_IO_CQ_DW10
@@ -499,7 +512,7 @@ typedef struct _ADMIN_IDENTIFY_CONTROLLER
 	struct
 	{
 		unsigned char supportsSMARTHealthInformationLogPage		:1;
-		unsigned char suppottsCommandEffectsLogPage				:1;
+		unsigned char supportsCommandEffectsLogPage				:1;
 		unsigned char reserved0									:6;
 	} LPA;
 
@@ -584,11 +597,7 @@ typedef struct _ADMIN_IDENTIFY_CONTROLLER
 	ADMIN_IDENTIFY_POWER_STATE_DESCRIPTOR PSDx[32];
 
 	unsigned char VS[1024];
-
 } ADMIN_IDENTIFY_CONTROLLER;
-
-
-
 
 /* Identify - LBA Format Data Structure */
 typedef struct _ADMIN_IDENTIFY_FORMAT_DATA
@@ -670,7 +679,6 @@ typedef struct _ADMIN_IDENTIFY_NAMESPACE
 
 	unsigned char reserved1[192];
 	unsigned char VS[3712];
-
 } ADMIN_IDENTIFY_NAMESPACE;
 
 
@@ -680,7 +688,7 @@ typedef struct _IO_WRITE_COMMAND_DW12
 	union {
 		unsigned int dword;
 		struct {
-			unsigned short NLB;
+			unsigned short NLB;//zero-based value
 			unsigned short reserved0				:10;
 			unsigned short PRINFO					:4;
 			unsigned short FUA						:1;
@@ -724,7 +732,7 @@ typedef struct _IO_READ_COMMAND_DW12
 	union {
 		unsigned int dword;
 		struct {
-			unsigned short NLB;
+			unsigned short NLB;//zero-based value
 			unsigned short reserved0				:10;
 			unsigned short PRINFO					:4;
 			unsigned short FUA						:1;
@@ -791,10 +799,9 @@ typedef struct _DATASET_MANAGEMENT_CONTEXT_ATTRIBUTES
 
 typedef union _DSMRangeUnion
 {
-    unsigned int value;
-    DATASET_MANAGEMENT_CONTEXT_ATTRIBUTES contextAttributes;
+	unsigned int value;
+	DATASET_MANAGEMENT_CONTEXT_ATTRIBUTES contextAttributes;
 } DSMRangeUnion;
-
 
 typedef struct _DATASET_MANAGEMENT_RANGE
 {
@@ -803,6 +810,9 @@ typedef struct _DATASET_MANAGEMENT_RANGE
 	unsigned int startingLBA[2];
 } DATASET_MANAGEMENT_RANGE;
 
+typedef struct _DSM_RANGE{
+	DATASET_MANAGEMENT_RANGE dmRange[3000];
+} DSM_RANGE, *P_DSM_RANGE;
 #pragma pack(pop)
 
 
@@ -845,6 +855,7 @@ typedef struct _NVME_STATUS
 	NVME_IO_CQ_STATUS ioCqInfo[MAX_NUM_OF_IO_CQ];
 } NVME_CONTEXT;
 
-unsigned int devAddr;
-//bool trim_flag;
+unsigned int global_write_cnt;
+unsigned int global_flush_cnt;
+
 #endif	//__NVME_H_

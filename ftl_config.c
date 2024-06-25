@@ -50,9 +50,11 @@
 #include <assert.h>
 #include "xil_printf.h"
 #include "memory_map.h"
+#include "t4nsc_ucode.h"
+#include "nsc_driver.h"
 
 unsigned int storageCapacity_L;
-V2FMCRegisters* chCtlReg[USER_CHANNELS];
+T4REGS chCtlReg[USER_CHANNELS];
 
 void InitFTL()
 {
@@ -73,41 +75,52 @@ void InitFTL()
 	xil_printf("[ ftl configuration complete. ]\r\n");
 }
 
+static void nfc_install_ucode(unsigned int* bram0)
+{
+	int i;
+	for (i = 0; i < T4NSCu_Common_CodeWordLength; i++)
+	{
+		bram0[i] = T4NSCuCode_Common[i];
+	}
+	for (i = 0; i < T4NSCu_PlainOps_CodeWordLength; i++)
+	{
+		bram0[T4NSCu_Common_CodeWordLength + i] = T4NSCuCode_PlainOps[i];
+	}
+}
 
+unsigned int NSCS[] = {
+	NSC_0_BASEADDR,
+	NSC_1_BASEADDR,
+	NSC_2_BASEADDR,
+	NSC_3_BASEADDR,
+};
+
+unsigned int NSC_UCODES[] = {
+	NSC_0_UCODEADDR,
+	NSC_1_UCODEADDR,
+	NSC_2_UCODEADDR,
+	NSC_3_UCODEADDR,
+};
+
+static unsigned int dqs_delay[] = {1099, 1099, 1099, 1099};
+static unsigned int dq_delay[]  = {00, 00, 00, 00};
 void InitChCtlReg()
 {
+	int i;
 	if(USER_CHANNELS < 1)
 		assert(!"[WARNING] Configuration Error: Channel [WARNING]");
 
-	chCtlReg[0] = (V2FMCRegisters*) NSC_0_BASEADDR;
-
-	if(USER_CHANNELS > 1)
-		chCtlReg[1] = (V2FMCRegisters*) NSC_1_BASEADDR;
-
-	if(USER_CHANNELS > 2)
-		chCtlReg[2] = (V2FMCRegisters*) NSC_2_BASEADDR;
-
-	if(USER_CHANNELS > 3)
-		chCtlReg[3] = (V2FMCRegisters*) NSC_3_BASEADDR;
-
-	if(USER_CHANNELS > 4)
-		chCtlReg[4] = (V2FMCRegisters*) NSC_4_BASEADDR;
-
-	if(USER_CHANNELS > 5)
-		chCtlReg[5] = (V2FMCRegisters*) NSC_5_BASEADDR;
-
-	if(USER_CHANNELS > 6)
-		chCtlReg[6] = (V2FMCRegisters*) NSC_6_BASEADDR;
-
-	if(USER_CHANNELS > 7)
-		chCtlReg[7] = (V2FMCRegisters*) NSC_7_BASEADDR;
+	for (i = 0; i < USER_CHANNELS; i++)
+	{
+		nfc_install_ucode((unsigned int*)NSC_UCODES[i]);
+		V2FInitializeHandle(&chCtlReg[i], (void*)NSCS[i]);
+	}
 }
-
-
 
 void InitNandArray()
 {
 	unsigned int chNo, wayNo, reqSlotTag;
+	int i; int k;
 
 	for(chNo=0; chNo<USER_CHANNELS; ++chNo)
 		for(wayNo=0; wayNo<USER_WAYS; ++wayNo)
@@ -147,6 +160,26 @@ void InitNandArray()
 
 	SyncAllLowLevelReqDone();
 
+	/*for (i = 0; i < USER_CHANNELS; i++)
+	{
+		nfc_set_dqs_delay(i, dqs_delay[i]);
+		//nfc_set_dq_delay(i, dq_delay[i]);
+	}*/
+
+	for (i = 0; i < USER_CHANNELS; i++)
+	{
+		for (k = 0; k < USER_WAYS; k++)
+		{
+			int j;
+			unsigned char* idData = (unsigned char*)(TEMPORARY_PAY_LOAD_ADDR + 16);
+			V2FReadIdSync(&chCtlReg[i], k, idData);
+			printf("Ch %d Way %d ReadId: ", i, k);
+			for (j = 0; j < 6;j ++)
+				printf("%x ", idData[j]);
+			printf("\r\n");
+		}
+	}
+
 	xil_printf("[ NAND device reset complete. ]\r\n");
 }
 
@@ -159,7 +192,7 @@ void CheckConfigRestriction()
 		assert(!"[WARNING] Configuration Error: WAY [WARNING]");
 	if(USER_BLOCKS_PER_LUN > MAIN_BLOCKS_PER_LUN)
 		assert(!"[WARNING] Configuration Error: BLOCK [WARNING]");
-	if((BITS_PER_FLASH_CELL != SLC_MODE) && (BITS_PER_FLASH_CELL != MLC_MODE))
+	if((BITS_PER_FLASH_CELL != SLC_MODE))
 		assert(!"[WARNING] Configuration Error: BIT_PER_FLASH_CELL [WARNING]");
 
 	if(RESERVED_DATA_BUFFER_BASE_ADDR + 0x00200000 > COMPLETE_FLAG_TABLE_ADDR)
