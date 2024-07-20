@@ -97,7 +97,6 @@ void dev_irq_handler()
 		PCIE_STATUS_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_STATUS_REG_ADDR);
 		xil_printf("PCIe Link: %d\r\n", pcieReg.pcieLinkUp);
-		// set_link_width(0) //you can choose pcie lane width 0,2,4,8 mini board -> maximum 4, cosmos+ board -> maximum 8
 		if(pcieReg.pcieLinkUp == 0)
 			g_nvmeTask.status = NVME_TASK_RESET;
 	}
@@ -139,17 +138,18 @@ void dev_irq_handler()
 		if(nvmeReg.ccEn == 1)
 			g_nvmeTask.status = NVME_TASK_WAIT_CC_EN;
 		else
-			g_nvmeTask.status = NVME_TASK_RESET;
-
+			g_nvmeTask.status = NVME_TASK_WAIT_RESET;
 	}
 
 	if(devReg.nvmeCcShn == 1)
 	{
 		NVME_STATUS_REG nvmeReg;
 		nvmeReg.dword = IO_READ32(NVME_STATUS_REG_ADDR);
-		xil_printf("NVME CC.SHN: %d\r\n", nvmeReg.ccShn);
-		if(nvmeReg.ccShn == 1)
+		if(nvmeReg.ccShn != 0)
+		{
+			xil_printf("NVME CC.SHN: %d\r\n", nvmeReg.ccShn);
 			g_nvmeTask.status = NVME_TASK_SHUTDOWN;
+		}
 	}
 
 	if(devReg.mAxiWriteErr == 1)
@@ -251,7 +251,7 @@ unsigned int get_nvme_cmd(unsigned short *qID, unsigned short *cmdSlotTag, unsig
 		*qID = nvmeReg.qID;
 		*cmdSlotTag = nvmeReg.cmdSlotTag;
 		*cmdSeqNum = nvmeReg.cmdSeqNum;
-		//xil_printf("nvmeReg.cmdSlotTag = 0x%X\r\n", nvmeReg.cmdSlotTag);
+
 		addr = NVME_CMD_SRAM_ADDR + (nvmeReg.cmdSlotTag * 64);
 		for(idx = 0; idx < 16; idx++)
 			*(cmdDword + idx) = IO_READ32(addr + (idx * 4));
@@ -427,10 +427,8 @@ void set_auto_rx_dma(unsigned int cmdSlotTag, unsigned int cmd4KBOffset, unsigne
 	ASSERT(cmd4KBOffset < 256);
 	
 	g_hostDmaStatus.fifoHead.dword = IO_READ32(HOST_DMA_FIFO_CNT_REG_ADDR);
-	
-	while((g_hostDmaStatus.fifoTail.autoDmaRx + 1) % 256 == g_hostDmaStatus.fifoHead.autoDmaRx) {
+	while((g_hostDmaStatus.fifoTail.autoDmaRx + 1) % 256 == g_hostDmaStatus.fifoHead.autoDmaRx)
 		g_hostDmaStatus.fifoHead.dword = IO_READ32(HOST_DMA_FIFO_CNT_REG_ADDR);
-	}
 
 	hostDmaReg.devAddr = devAddr;
 
@@ -531,52 +529,41 @@ unsigned int check_auto_tx_dma_partial_done(unsigned int tailIndex, unsigned int
 
 unsigned int check_auto_rx_dma_partial_done(unsigned int tailIndex, unsigned int tailAssistIndex)
 {
+	//xil_printf("check_auto_rx_dma_partial_done \r\n");
+
 	g_hostDmaStatus.fifoHead.dword = IO_READ32(HOST_DMA_FIFO_CNT_REG_ADDR);
-	if(g_hostDmaStatus.fifoHead.autoDmaRx == g_hostDmaStatus.fifoTail.autoDmaRx) {
+
+	if(g_hostDmaStatus.fifoHead.autoDmaRx == g_hostDmaStatus.fifoTail.autoDmaRx)
 		return 1;
-	}
 
 	if(g_hostDmaStatus.fifoHead.autoDmaRx < tailIndex)
 	{
 		if(g_hostDmaStatus.fifoTail.autoDmaRx < tailIndex)
 		{
 			if(g_hostDmaStatus.fifoTail.autoDmaRx > g_hostDmaStatus.fifoHead.autoDmaRx)
-			{
-					return 1;
-				}
+				return 1;
 			else
 				if(g_hostDmaAssistStatus.autoDmaRxOverFlowCnt != (tailAssistIndex + 1))
-				{
-						return 1;
-					}
+					return 1;
 		}
 		else
 			if(g_hostDmaAssistStatus.autoDmaRxOverFlowCnt != tailAssistIndex)
-			{
-					return 1;
-				}
+				return 1;
+
 	}
 	else if(g_hostDmaStatus.fifoHead.autoDmaRx == tailIndex)
-	{
-			return 1;
-		}
+		return 1;
 	else
 	{
 		if(g_hostDmaStatus.fifoTail.autoDmaRx < tailIndex)
-		{
-				return 1;
-			}
+			return 1;
 		else
 		{
 			if(g_hostDmaStatus.fifoTail.autoDmaRx > g_hostDmaStatus.fifoHead.autoDmaRx)
-			{
-					return 1;
-				}
+				return 1;
 			else
 				if(g_hostDmaAssistStatus.autoDmaRxOverFlowCnt != tailAssistIndex)
-				{
-						return 1;
-					}
+					return 1;
 		}
 	}
 

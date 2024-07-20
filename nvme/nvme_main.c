@@ -57,24 +57,42 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 #include "xil_printf.h"
+#include "xtime_l.h"
 #include "debug.h"
 #include "io_access.h"
+#include "../trim.h"
 
 #include "nvme.h"
 #include "host_lld.h"
 #include "nvme_main.h"
 #include "nvme_admin_cmd.h"
 #include "nvme_io_cmd.h"
-#include "../trim.h"
 
 #include "../memory_map.h"
 
 volatile NVME_CONTEXT g_nvmeTask;
 
+//#define NAND_STANDALONE_TEST
+
+#ifdef NAND_STANDALONE_TEST
+typedef enum {
+	NAND_OP_WRITE,
+    NAND_OP_READ,
+    NAND_OP_CHECK,
+    NAND_OP_NUM,
+} nand_op_type;
+
+static nand_op_type nand_op;
+#endif
+
 void nvme_main()
 {
+	global_write_cnt = 0;
+	global_flush_cnt = 0;
 	unsigned int exeLlr;
 	unsigned int rstCnt = 0;
+	
+	cmdTime = 0;
 
 	xil_printf("!!! Wait until FTL reset complete !!! \r\n");
 
@@ -86,7 +104,6 @@ void nvme_main()
 	while(1)
 	{
 		exeLlr = 1;
-
 
 		if(g_nvmeTask.status == NVME_TASK_WAIT_CC_EN)
 		{
@@ -102,25 +119,39 @@ void nvme_main()
 		}
 		else if(g_nvmeTask.status == NVME_TASK_RUNNING)
 		{
+			trim_flag = 0;
+
 			NVME_COMMAND nvmeCmd;
 			unsigned int cmdValid;
+
 			cmdValid = get_nvme_cmd(&nvmeCmd.qID, &nvmeCmd.cmdSlotTag, &nvmeCmd.cmdSeqNum, nvmeCmd.cmdDword);
+
 			if(cmdValid == 1)
-			{	rstCnt = 0;
+			{
+				rstCnt = 0;
 				if(nvmeCmd.qID == 0)
 				{
 					handle_nvme_admin_cmd(&nvmeCmd);
 				}
 				else
 				{
+
 					handle_nvme_io_cmd(&nvmeCmd);
 					ReqTransSliceToLowLevel();
 					exeLlr=0;
 				}
 			}
+
+	       	if (trim_flag == 1)
+		   	{
+				GetTrimData();
+				DoTrim();
+			}
 		}
 		else if(g_nvmeTask.status == NVME_TASK_SHUTDOWN)
 		{
+			xil_printf("global_flush_cnt: %d\r\n", global_write_cnt + global_flush_cnt);
+			xil_printf("global_write_cnt : %d\r\n", global_write_cnt);
 			NVME_STATUS_REG nvmeReg;
 			nvmeReg.dword = IO_READ32(NVME_STATUS_REG_ADDR);
 			if(nvmeReg.ccShn != 0)
@@ -151,9 +182,19 @@ void nvme_main()
 			ccEn = check_nvme_cc_en();
 			if(ccEn == 0)
 			{
+                unsigned int qID;
+
 				g_nvmeTask.cacheEn = 0;
 				set_nvme_csts_shst(0);
 				set_nvme_csts_rdy(0);
+
+                set_nvme_admin_queue(0, 0, 0);
+                for(qID = 0; qID < 8; qID++)
+                {
+                    set_io_cq(qID, 0, 0, 0, 0, 0, 0);
+                    set_io_sq(qID, 0, 0, 0, 0, 0);
+                }
+
 				g_nvmeTask.status = NVME_TASK_IDLE;
 				xil_printf("\r\nNVMe disable!!!\r\n");
 			}
@@ -185,14 +226,241 @@ void nvme_main()
 			xil_printf("\r\nNVMe reset!!!\r\n");
 		}
 
+
+
+#ifdef NAND_STANDALONE_TEST
+        {
+            extern void EvictDataBufEntry(unsigned int originReqSlotTag);
+
+            static unsigned int logicalSliceAddr = 0;
+			int *devAddr;
+           	unsigned int reqSlotTag, dataBufEntry, i = 0, virtualSliceAddr;
+           	static unsigned int test_count = 0, init_once = 0;
+           	static XTime tStart, tEnd;
+           	double ElapsedTime;
+
+           	if(init_once == 0)
+           	{
+           		init_once = 1;
+
+           		XTime_GetTime(&tStart);
+           		XTime_GetTime(&tEnd);
+           	}
+            if(nand_op == NAND_OP_WRITE)
+            {
+            	if(logicalSliceAddr < (storageCapacity_L / (BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)) / USER_CHANNELS / USER_WAYS)
+//               	if(logicalSliceAddr < (storageCapacity_L / (BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)))
+            	{
+            		if(notCompletedNandReqCnt > 256 || blockedReqCnt > 128)
+            		{
+//                        xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+            			SyncAllLowLevelReqDone();
+//                        xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+            		}
+                	reqSlotTag = GetFromFreeReqQ();
+
+                	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NAND;
+                	reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_WRITE;
+                	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = logicalSliceAddr;
+
+            		//allocate a data buffer entry for this request
+            		dataBufEntry = CheckDataBufHit(reqSlotTag);
+            		if(dataBufEntry != DATA_BUF_FAIL)
+            		{
+            			//data buffer hit
+            			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+            		}
+            		else
+            		{
+            			//data buffer miss, allocate a new buffer entry
+            			dataBufEntry = AllocateDataBuf();
+            			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+
+            			//clear the allocated data buffer entry being used by a previous request
+            			EvictDataBufEntry(reqSlotTag);
+
+            			//update meta-data of the allocated data buffer entry
+            			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
+            			PutToDataBufHashList(dataBufEntry);
+            		}
+
+            		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
+               		UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+
+        			dataBufMapPtr->dataBuf[dataBufEntry].dirty = DATA_BUF_DIRTY;
+
+                	devAddr = (int *)GenerateDataBufAddr(reqSlotTag);
+                	for(i = 0; i < BYTES_PER_DATA_REGION_OF_SLICE / 4; i++)
+                	{
+                    	*(devAddr + i) = rand();
+                    }
+
+               		reqPoolPtr->reqPool[reqSlotTag].reqQueueType = REQ_QUEUE_TYPE_NONE;
+                	PutToFreeReqQ(reqSlotTag);
+                	ReleaseBlockedByBufDepReq(reqSlotTag);
+
+                    if(logicalSliceAddr % 100000 == 0)
+                    {
+                        xil_printf("W: logicalSliceAddr=%d\r\n", logicalSliceAddr);
+        				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+
+        				XTime_GetTime(&tEnd);
+                   		ElapsedTime = 1.0 * (tEnd - tStart) / (COUNTS_PER_SECOND);
+                   		printf("Took %.2f s.\r\n",ElapsedTime);
+                   		tStart = tEnd;
+                    }
+                    logicalSliceAddr++;
+            	}
+            	else
+            	{
+                    xil_printf("W: logicalSliceAddr=%d\r\n", logicalSliceAddr);
+    				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+                    logicalSliceAddr = 0;
+                	nand_op = (nand_op + 1) % NAND_OP_NUM;
+
+    				XTime_GetTime(&tEnd);
+               		ElapsedTime = 1.0 * (tEnd - tStart) / (COUNTS_PER_SECOND);
+               		printf("Took %.2f s.\r\n",ElapsedTime);
+               		tStart = tEnd;
+            	}
+            }
+            else if(nand_op == NAND_OP_READ)
+            {
+            	if(logicalSliceAddr < (storageCapacity_L / (BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)) / USER_CHANNELS / USER_WAYS)
+//                if(logicalSliceAddr < (storageCapacity_L / (BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)))
+            	{
+            		if(notCompletedNandReqCnt > 256 || blockedReqCnt > 128)
+            		{
+//                        xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+            			SyncAllLowLevelReqDone();
+//                        xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+            		}
+                	reqSlotTag = GetFromFreeReqQ();
+
+                	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NAND;
+                	reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_READ;
+                	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = logicalSliceAddr;
+
+            		//allocate a data buffer entry for this request
+            		dataBufEntry = CheckDataBufHit(reqSlotTag);
+            		if(dataBufEntry != DATA_BUF_FAIL)
+            		{
+            			//data buffer hit
+            			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+                        reqPoolPtr->reqPool[reqSlotTag].reqQueueType = REQ_QUEUE_TYPE_NONE;
+                        PutToFreeReqQ(reqSlotTag);
+            		}
+            		else
+            		{
+            			//data buffer miss, allocate a new buffer entry
+            			dataBufEntry = AllocateDataBuf();
+            			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+
+            			//clear the allocated data buffer entry being used by a previous request
+            			EvictDataBufEntry(reqSlotTag);
+
+            			//update meta-data of the allocated data buffer entry
+            			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
+            			PutToDataBufHashList(dataBufEntry);
+
+                        virtualSliceAddr =  AddrTransRead(reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr);
+                        
+                        if(virtualSliceAddr != VSA_FAIL)
+                        {
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandAddr = REQ_OPT_NAND_ADDR_VSA;
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEcc = REQ_OPT_NAND_ECC_ON;
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEccWarning = REQ_OPT_NAND_ECC_WARNING_ON;
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.rowAddrDependencyCheck = REQ_OPT_ROW_ADDR_DEPENDENCY_CHECK;
+                            reqPoolPtr->reqPool[reqSlotTag].reqOpt.blockSpace = REQ_OPT_BLOCK_SPACE_MAIN;
+                        
+                            UpdateDataBufEntryInfoBlockingReq(reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry, reqSlotTag);
+                            reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr;
+                        
+                            SelectLowLevelReqQ(reqSlotTag);
+                        }
+                        else
+                        {
+                            reqPoolPtr->reqPool[reqSlotTag].reqQueueType = REQ_QUEUE_TYPE_NONE;
+                            PutToFreeReqQ(reqSlotTag);
+                        }
+            		}
+
+                    if(logicalSliceAddr % 100000 == 0)
+                    {
+                        xil_printf("R: logicalSliceAddr=%d\r\n", logicalSliceAddr);
+        				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+
+        				XTime_GetTime(&tEnd);
+                   		ElapsedTime = 1.0 * (tEnd - tStart) / (COUNTS_PER_SECOND);
+                   		printf("Took %.2f s.\r\n",ElapsedTime);
+                   		tStart = tEnd;
+                    }
+                    logicalSliceAddr++;
+            	}
+            	else
+            	{
+                    xil_printf("R: logicalSliceAddr=%d\r\n", logicalSliceAddr);
+    				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+                    logicalSliceAddr = 0;
+                	nand_op = (nand_op + 1) % NAND_OP_NUM;
+
+    				XTime_GetTime(&tEnd);
+               		ElapsedTime = 1.0 * (tEnd - tStart) / (COUNTS_PER_SECOND);
+               		printf("Took %.2f s.\r\n",ElapsedTime);
+               		tStart = tEnd;
+            	}
+            }
+            else if(nand_op == NAND_OP_CHECK)
+            {
+				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+            	SyncAllLowLevelReqDone();
+				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+
+                logicalSliceAddr = 0;
+                nand_op = (nand_op + 2) % NAND_OP_NUM;
+
+				XTime_GetTime(&tEnd);
+           		ElapsedTime = 1.0 * (tEnd - tStart) / (COUNTS_PER_SECOND);
+           		printf("Took %.2f s.\r\n",ElapsedTime);
+           		tStart = tEnd;
+
+				xil_printf("test_count=%d\r\n", ++test_count);
+            }
+        }
+#endif
+
 		if(exeLlr && ((nvmeDmaReqQ.headReq != REQ_SLOT_TAG_NONE) || notCompletedNandReqCnt || blockedReqCnt))
 		{
+#if 0
+			static unsigned int saved_notCompletedNandReqCnt, saved_blockedReqCnt;
+			static unsigned int check_cnt;
+#endif
 			CheckDoneNvmeDmaReq();
 			SchedulingNandReq();
-			if(trim_flag)
+#if 0
+#if 0
+			if(notCompletedNandReqCnt || blockedReqCnt)
 			{
-				TrimOperation();
+				xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
 			}
+#else
+			if(saved_notCompletedNandReqCnt == notCompletedNandReqCnt && saved_blockedReqCnt == blockedReqCnt)
+			{
+				check_cnt++;
+				if(check_cnt > 10000)
+				{
+					xil_printf("notCompletedNandReqCnt=%d,blockedReqCnt=%d\r\n", notCompletedNandReqCnt, blockedReqCnt);
+				}
+			}
+			else
+			{
+				check_cnt = 0;
+			}
+			saved_notCompletedNandReqCnt = notCompletedNandReqCnt;
+			saved_blockedReqCnt = blockedReqCnt;
+#endif
+#endif
 		}
 	}
 }

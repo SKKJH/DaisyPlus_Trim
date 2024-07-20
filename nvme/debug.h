@@ -34,7 +34,7 @@
 // Version: v1.0.0
 //
 // Description:
-//   - defines macros for easy debugging
+//   - defines macros for debugging
 //////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -48,8 +48,16 @@
 #define __DEBUG_H_
 
 #include "assert.h"
+#include "nvme.h"
+#include "xil_printf.h"
+
+#define __CRITICAL_MESSAGE 0
 
 #define __ASSERT 1
+#define __DEBUG_MESSAGE_LEVEL __CRITICAL_MESSAGE
+#define __ADMIN_CMD_DONE_MESSAGE_PRINT 0
+#define __IO_CMD_DONE_MESSAGE_PRINT 0
+#define __DEBUG 0
 
 #if __ASSERT
 #define ASSERT(X)														\
@@ -62,5 +70,11 @@ if (!(X))																\
 #define ASSERT(X)
 #endif
 
+#if __DEBUG
+#define PRINT(FORMAT, ...)	xil_printf(FORMAT, ## __VA_ARGS__)
+#else
+#define PRINT(FORMAT, ...)
 #endif
 
+
+#endif

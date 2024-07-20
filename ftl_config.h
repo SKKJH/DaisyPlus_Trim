@@ -52,65 +52,45 @@
 #include "nvme/nvme.h"
 
 //checks NSC connection, initializes base address
-#ifdef	XPAR___TIGER4NSC_7_BASEADDR
-#define NSC_7_CONNECTED	1
-#define NSC_7_BASEADDR	XPAR___TIGER4NSC_7_BASEADDR
-#else
-#define NSC_7_CONNECTED	0
-#define NSC_7_BASEADDR	0
-#endif
-#ifdef	XPAR___TIGER4NSC_6_BASEADDR
-#define NSC_6_CONNECTED	1
-#define NSC_6_BASEADDR	XPAR___TIGER4NSC_6_BASEADDR
-#else
-#define NSC_6_CONNECTED	0
-#define NSC_6_BASEADDR	0
-#endif
-#ifdef	XPAR___TIGER4NSC_5_BASEADDR
-#define NSC_5_CONNECTED	1
-#define NSC_5_BASEADDR	XPAR___TIGER4NSC_5_BASEADDR
-#else
-#define NSC_5_CONNECTED	0
-#define NSC_5_BASEADDR	0
-#endif
-#ifdef	XPAR___TIGER4NSC_4_BASEADDR
-#define NSC_4_CONNECTED	1
-#define NSC_4_BASEADDR	XPAR___TIGER4NSC_4_BASEADDR
-#else
-#define NSC_4_CONNECTED	0
-#define NSC_4_BASEADDR	0
-#endif
-#ifdef	XPAR___TIGER4NSC_3_BASEADDR
+#ifdef	XPAR_T4NFC_HLPER_3_BASEADDR
 #define NSC_3_CONNECTED	1
-#define NSC_3_BASEADDR	XPAR___TIGER4NSC_3_BASEADDR
+#define NSC_3_UCODEADDR XPAR_AXI_BRAM_CTRL_3_S_AXI_BASEADDR
+#define NSC_3_BASEADDR	XPAR_T4NFC_HLPER_3_BASEADDR
 #else
 #define NSC_3_CONNECTED	0
+#define NSC_3_UCODEADDR 0
 #define NSC_3_BASEADDR	0
 #endif
-#ifdef	XPAR___TIGER4NSC_2_BASEADDR
+#ifdef	XPAR_T4NFC_HLPER_2_BASEADDR
 #define NSC_2_CONNECTED	1
-#define NSC_2_BASEADDR	XPAR___TIGER4NSC_2_BASEADDR
+#define NSC_2_UCODEADDR XPAR_AXI_BRAM_CTRL_2_S_AXI_BASEADDR
+#define NSC_2_BASEADDR	XPAR_T4NFC_HLPER_2_BASEADDR
 #else
 #define NSC_2_CONNECTED	0
+#define NSC_2_UCODEADDR 0
 #define NSC_2_BASEADDR	0
 #endif
-#ifdef	XPAR___TIGER4NSC_1_BASEADDR
+#ifdef	XPAR_T4NFC_HLPER_1_BASEADDR
 #define NSC_1_CONNECTED	1
-#define NSC_1_BASEADDR	XPAR___TIGER4NSC_1_BASEADDR
+#define NSC_1_UCODEADDR XPAR_AXI_BRAM_CTRL_1_S_AXI_BASEADDR
+#define NSC_1_BASEADDR	XPAR_T4NFC_HLPER_1_BASEADDR
 #else
 #define NSC_1_CONNECTED	0
+#define NSC_1_UCODEADDR 0
 #define NSC_1_BASEADDR	0
 #endif
-#ifdef	XPAR___TIGER4NSC_0_BASEADDR
+#ifdef	XPAR_T4NFC_HLPER_0_BASEADDR
 #define NSC_0_CONNECTED	1
-#define NSC_0_BASEADDR	XPAR___TIGER4NSC_0_BASEADDR
+#define NSC_0_UCODEADDR XPAR_AXI_BRAM_CTRL_0_S_AXI_BASEADDR
+#define NSC_0_BASEADDR	XPAR_T4NFC_HLPER_0_BASEADDR
 #else
 #define NSC_0_CONNECTED	0
+#define NSC_0_UCODEADDR 0
 #define NSC_0_BASEADDR	0
 #endif
 
 //number of connected (=AXI mapped) NSC
-#define NUMBER_OF_CONNECTED_CHANNEL (NSC_7_CONNECTED + NSC_6_CONNECTED + NSC_5_CONNECTED + NSC_4_CONNECTED + NSC_3_CONNECTED + NSC_2_CONNECTED + NSC_1_CONNECTED + NSC_0_CONNECTED)
+#define NUMBER_OF_CONNECTED_CHANNEL (NSC_3_CONNECTED + NSC_2_CONNECTED + NSC_1_CONNECTED + NSC_0_CONNECTED)
 
 
 //--------------------------------
@@ -154,14 +134,14 @@
 
 //row -> page
 #define	BYTES_PER_DATA_REGION_OF_PAGE			16384
-#define BYTES_PER_SPARE_REGION_OF_PAGE			256		//last 8 byte used by ECC engine (CRC function)
+#define BYTES_PER_SPARE_REGION_OF_PAGE			256
 // (BYTES_PER_SPARE_REGION_OF_NAND_ROW - BYTES_PER_SPARE_REGION_OF_PAGE) bytes are used by ECC engine (Parity data)
 #define	PAGES_PER_SLC_BLOCK			(ROWS_PER_SLC_BLOCK)
 #define	PAGES_PER_MLC_BLOCK			(ROWS_PER_MLC_BLOCK)
 
 //ECC encoder/decoder specification
 #define ECC_CHUNKS_PER_PAGE				32
-#define BIT_ERROR_THRESHOLD_PER_CHUNK	20
+#define BIT_ERROR_THRESHOLD_PER_CHUNK	24
 #define ERROR_INFO_WORD_COUNT 			11
 
 
@@ -183,16 +163,19 @@
 
 //************************************************************************
 #define	BITS_PER_FLASH_CELL		SLC_MODE	//user configurable factor
-#define	USER_BLOCKS_PER_LUN		4096		//user configurable factor
-#define	USER_CHANNELS			(NUMBER_OF_CONNECTED_CHANNEL)		//user configurable factor
-#define	USER_WAYS				8			//user configurable factor
+//#define	USER_BLOCKS_PER_LUN		4096		//user configurable factor
+//#define	USER_CHANNELS			(NUMBER_OF_CONNECTED_CHANNEL)		//user configurable factor
+//#define	USER_WAYS				8			//user configurable factor
+#define	USER_BLOCKS_PER_LUN		512		//user configurable factor
+#define	USER_CHANNELS			4		//user configurable factor
+#define	USER_WAYS				4			//user configurable factor
 //************************************************************************
 
 #define	BYTES_PER_DATA_REGION_OF_SLICE		16384		//slice is a mapping unit of FTL
 #define	BYTES_PER_SPARE_REGION_OF_SLICE		256
 
 #define SLICES_PER_PAGE				(BYTES_PER_DATA_REGION_OF_PAGE / BYTES_PER_DATA_REGION_OF_SLICE)	//a slice directs a page, full page mapping
-#define NVME_BLOCKS_PER_SLICE		(BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)		//16384/4096 = 4
+#define NVME_BLOCKS_PER_SLICE		(BYTES_PER_DATA_REGION_OF_SLICE / BYTES_PER_NVME_BLOCK)
 
 #define	USER_DIES					(USER_CHANNELS * USER_WAYS)
 
@@ -202,7 +185,7 @@
 #define	USER_PAGES_PER_CHANNEL		(USER_PAGES_PER_DIE * USER_WAYS)
 #define	USER_PAGES_PER_SSD			(USER_PAGES_PER_CHANNEL * USER_CHANNELS)
 
-#define	SLICES_PER_BLOCK			(USER_PAGES_PER_BLOCK * SLICES_PER_PAGE) //128*1
+#define	SLICES_PER_BLOCK			(USER_PAGES_PER_BLOCK * SLICES_PER_PAGE)
 #define	SLICES_PER_LUN				(USER_PAGES_PER_LUN * SLICES_PER_PAGE)
 #define	SLICES_PER_DIE				(USER_PAGES_PER_DIE * SLICES_PER_PAGE)
 #define	SLICES_PER_CHANNEL			(USER_PAGES_PER_CHANNEL * SLICES_PER_PAGE)
@@ -225,6 +208,6 @@ void InitNandArray();
 void CheckConfigRestriction();
 
 extern unsigned int storageCapacity_L;
-extern V2FMCRegisters* chCtlReg[USER_CHANNELS];
+extern T4REGS chCtlReg[USER_CHANNELS];
 
 #endif /* FTL_CONFIG_H_ */

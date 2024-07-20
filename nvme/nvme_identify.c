@@ -57,7 +57,7 @@
 #include "nvme_identify.h"
 #include "../ftl_config.h"
 
-void identify_controller(unsigned int pBuffer)
+void controller_identification(unsigned int pBuffer)
 {
 	ADMIN_IDENTIFY_CONTROLLER *identifyCNTL;
 	ADMIN_IDENTIFY_POWER_STATE_DESCRIPTOR *powerStateDesc;
@@ -84,6 +84,9 @@ void identify_controller(unsigned int pBuffer)
 	identifyCNTL->IEEE[1] = 0xD2;
 	identifyCNTL->IEEE[2] = 0x5C;
 	identifyCNTL->CMIC = 0x0;
+	//MDTS: Maximum Data Transfer Size
+	//The host should not submit a command that exceeds this transfer size
+	//(2^n) * 4KB), n=8 => 1MB
 	identifyCNTL->MDTS = 0x8;
 	identifyCNTL->CNTLID = 0x9;
 
@@ -145,7 +148,7 @@ void identify_controller(unsigned int pBuffer)
 	powerStateDesc->RWL = 0x0;
 }
 
-void identify_namespace(unsigned int pBuffer)
+void namespace_identification(unsigned int pBuffer)
 {
 	ADMIN_IDENTIFY_NAMESPACE *identifyNS;
 	ADMIN_IDENTIFY_FORMAT_DATA *formatData;

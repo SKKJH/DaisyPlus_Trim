@@ -1,10 +1,9 @@
-#include "nvme/nvme.h"
-
-//void TrimOperation();
-void TrimOperation();
-void TrimInfo();
-unsigned int nr;
-unsigned int trim_flag;
-unsigned int trim_flag2;
-unsigned int TrimReqTag;
-unsigned int trimdevAddr;
+#include "xtime_l.h"
+unsigned int trim_flag, nr, trimDevAddr;
+XTime cmdStart, cmdEnd, cmdTime;
+XTime dataStart, dataEnd, dataTime;
+XTime bufStart, bufEnd, bufTime;
+XTime tableStart, tableEnd, tableTime;
+void GetTrimData();
+void DoTrim();
+void TRIM(unsigned int LPN, unsigned int BLK0, unsigned int BLK1, unsigned int BLK2, unsigned int BLK3);
