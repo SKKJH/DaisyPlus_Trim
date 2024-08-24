@@ -1,0 +1,18 @@
+
+#ifdef WIN32
+
+#ifndef __BSP_WINDOWS_HL__
+#define __BSP_WINDOWS_HL__
+
+#include <stdlib.h>
+
+#include "xuartps_hw.h"
+#include "xil_cache.h"
+#include "xil_mmu.h"
+#include "xil_exception.h"
+
+#include "random.h"
+
+#endif		// end of #ifndef __BSP_WINDOWS_HL__
+
+#endif	// #ifdef WIN32
