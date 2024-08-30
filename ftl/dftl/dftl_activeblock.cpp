@@ -33,6 +33,10 @@ PROGRAM_UNIT::PROGRAM_UNIT(VOID)
 VOID
 PROGRAM_UNIT::Add(VOID* pstRequest, UINT32 nVPPN, IOTYPE eBlockType, IOTYPE eRequestType)
 {
+	if(m_nLPNCount == 0)
+	{
+		m_nLPNCount = 0;
+	}
 	if (m_nLPNCount == 0)
 	{
 		DEBUG_ASSERT(m_bProgramming == FALSE);
