@@ -9,8 +9,8 @@
 * permission of ESLab
 *
 * Author: DongYoung Seo (dongyoung.seo@gmail.com)
-* ESLab: http://nyx.skku.ac.kr
-*
+* ESLab: http://nyx.skku.ac.kr/
+* 
 *******************************************************/
 
 #include "xil_types.h"
